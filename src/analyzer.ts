@@ -2,8 +2,9 @@
  * Created by Ayelet Technology Private Limited
  */
 
-import Parser, { Query, QueryCapture, SyntaxNode } from 'tree-sitter';
-import * as CPP from 'tree-sitter-cpp';
+import Parser from 'tree-sitter';
+import type { Query, QueryCapture, SyntaxNode } from 'tree-sitter';
+import CPP from 'tree-sitter-cpp';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as glob from 'glob';
@@ -143,15 +144,13 @@ export class UnrealCodeAnalyzer {
 
   constructor() {
     this.parser = new Parser() as ExtendedParser;
-    this.parser.setLanguage(CPP);
-    
-    // Pre-cache common queries
-    Object.entries(this.QUERY_PATTERNS).forEach(([key, pattern]) => {
-      const query = this.parser.createQuery(pattern);
-      if (query) {
-        this.queryCache.set(key, query);
-      }
-    });
+    // Delay language setting until actually needed
+  }
+
+  private ensureParserReady(): void {
+    if (!this.parser.getLanguage()) {
+      this.parser.setLanguage(CPP);
+    }
   }
 
   private manageCache<T extends object>(cache: Map<string, T>, key: string, value: T): void {
@@ -220,6 +219,7 @@ export class UnrealCodeAnalyzer {
   }
 
   private async parseFile(filePath: string): Promise<void> {
+    this.ensureParserReady();
     const content = fs.readFileSync(filePath, 'utf8');
     let tree = this.astCache.get(filePath);
     
@@ -450,6 +450,7 @@ export class UnrealCodeAnalyzer {
       const batch = files.slice(i, i + BATCH_SIZE);
       const batchResults = await Promise.all(
         batch.map(async (file) => {
+          this.ensureParserReady();
           const content = fs.readFileSync(file, 'utf8');
           let tree = this.astCache.get(file);
           
@@ -929,6 +930,7 @@ export class UnrealCodeAnalyzer {
     for (let i = 0; i < headerFiles.length; i += BATCH_SIZE) {
       const batch = headerFiles.slice(i, i + BATCH_SIZE);
       await Promise.all(batch.map(async (file) => {
+        this.ensureParserReady();
         await this.parseFile(file);
         const content = fs.readFileSync(file, 'utf8');
         const tree = this.parser.parse(content);
